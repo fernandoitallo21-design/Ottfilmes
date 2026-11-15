@@ -58,6 +58,13 @@ function parseVersions(fields, bases) {
   return result;
 }
 
+function cleanDisplayTitle(value) {
+  return String(value || "")
+    .replace(/\\[[^\\]]*(?:1080p|720p|2160p|4k|web[- .]?dl|bluray|brrip|hdtv|x264|x265)[^\\]]*\\]/ig, "")
+    .replace(/\\((?:1080p|720p|2160p|4k|web[- .]?dl|bluray|brrip|hdtv|x264|x265)[^)]*\\)/ig, "")
+    .replace(/\\s*[-_.]+\\s*/g, " ").replace(/\\s{2,}/g, " ").trim();
+}
+
 function normTitle(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(/\s*\(\d{4}\)\s*$/, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -144,7 +151,7 @@ function cleanAttribute(value) {
 }
 
 function entry(title, url, group, label, logo, meta = {}) {
-  const cleanTitle = String(title).replace(/[\r\n]/g, " ").replace(/"/g, "'").trim();
+  const cleanTitle = cleanDisplayTitle(title).replace(/[\\r\\n]/g, " ").replace(/"/g, "'").trim();
   const year = cleanAttribute(meta.year), rating = cleanAttribute(meta.rating);
   const genres = cleanAttribute(meta.genres), certification = cleanAttribute(meta.certification);
   const displayBase = year && !cleanTitle.endsWith("(" + year + ")") ? cleanTitle + " (" + year + ")" : cleanTitle;
@@ -172,6 +179,10 @@ module.exports = async function handler(req, res) {
   try {
     const type = String(req.query.type || "all").toLowerCase();
     if (!["all", "movies", "series"].includes(type)) return res.status(400).send("Use type=all, movies ou series");
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 2000)) : 500;
+    const requestedOffset = Number.parseInt(req.query.offset, 10);
+    const offset = Number.isFinite(requestedOffset) ? Math.max(0, requestedOffset) : 0;
 
     const index = await readText("indice.txt");
     const bases = new Map();
@@ -257,8 +268,12 @@ module.exports = async function handler(req, res) {
       })());
     }
     await Promise.all(jobs);
-    if (output.length === 1) return res.status(200).send("#EXTM3U\n");
-    return res.status(200).send(output.join("\n") + "\n");
+    if (output.length === 1) return res.status(200).send("#EXTM3U\\n");
+    const entries = output.slice(1 + offset, 1 + offset + limit);
+    res.setHeader("X-Playlist-Total", String(output.length - 1));
+    res.setHeader("X-Playlist-Returned", String(entries.length));
+    res.setHeader("X-Playlist-Offset", String(offset));
+    return res.status(200).send(["#EXTM3U", ...entries].join("\\n") + "\\n");
   } catch (error) {
     console.error(error);
     return res.status(502).send("# Erro ao consultar o catálogo Saimo: " + String(error.message || error).replace(/[\r\n]/g, " ") + "\n");
