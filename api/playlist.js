@@ -62,7 +62,7 @@ function cleanDisplayTitle(value) {
   return String(value || "")
     .replace(/\\[[^\\]]*(?:1080p|720p|2160p|4k|web[- .]?dl|bluray|brrip|hdtv|x264|x265)[^\\]]*\\]/ig, "")
     .replace(/\\((?:1080p|720p|2160p|4k|web[- .]?dl|bluray|brrip|hdtv|x264|x265)[^)]*\\)/ig, "")
-    .replace(/\\s*[-_.]+\\s*/g, " ").replace(/\\s{2,}/g, " ").trim();
+    .replace(/[_.]+/g, " ").replace(/\\s{2,}/g, " ").trim();
 }
 
 function normTitle(value) {
@@ -215,7 +215,7 @@ module.exports = async function handler(req, res) {
               const versionLabel = v.version === "dub" ? "Dublado" : v.version === "leg" ? "Legendado" : v.version;
               const logo = covers.get("f:" + normTitle(title)) || "";
               const meta = metadata.get("f:" + normTitle(title)) || {};
-              const key = ["f", normTitle(title), versionLabel, v.url].join("|");
+              const key = ["f", normTitle(title), versionLabel].join("|");
               if (!seen.has(key)) { seen.add(key); output.push(entry(title, v.url, "Filmes", versionLabel, logo, meta)); }
               if (output.length >= MAX_ITEMS * 2) return;
             }
@@ -259,7 +259,7 @@ module.exports = async function handler(req, res) {
               const label = "T" + season.padStart(2, "0") + "E" + episode.padStart(2, "0") + (version === "dub" ? " Dublado" : version === "leg" ? " Legendado" : "");
               const logo = covers.get("s:" + normTitle(s.title)) || "";
               const meta = metadata.get("s:" + normTitle(s.title)) || {};
-              const key = ["s", normTitle(show), label, url].join("|");
+              const key = ["s", normTitle(show), label].join("|");
               if (!seen.has(key)) { seen.add(key); output.push(entry(show + " - " + label, url, "Séries", "", logo, meta)); }
               if (output.length >= MAX_ITEMS * 2) return;
             }
