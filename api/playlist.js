@@ -268,12 +268,12 @@ module.exports = async function handler(req, res) {
       })());
     }
     await Promise.all(jobs);
-    if (output.length === 1) return res.status(200).send("#EXTM3U\\n");
+    if (output.length === 1) return res.status(200).send("#EXTM3U\n");
     const entries = output.slice(1 + offset, 1 + offset + limit);
     res.setHeader("X-Playlist-Total", String(output.length - 1));
     res.setHeader("X-Playlist-Returned", String(entries.length));
     res.setHeader("X-Playlist-Offset", String(offset));
-    return res.status(200).send(["#EXTM3U", ...entries].join("\\n") + "\\n");
+    return res.status(200).send(["#EXTM3U", ...entries].join("\n") + "\n");
   } catch (error) {
     console.error(error);
     return res.status(502).send("# Erro ao consultar o catálogo Saimo: " + String(error.message || error).replace(/[\r\n]/g, " ") + "\n");
