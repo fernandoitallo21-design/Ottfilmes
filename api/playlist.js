@@ -111,12 +111,54 @@ async function loadCovers() {
   return covers;
 }
 
-function entry(title, url, group, label, logo) {
+async function loadMetadata() {
+  const metadata = new Map();
+  const keyFor = (kind, title) => (kind === "s" ? "s:" : "f:") + normTitle(title);
+  try {
+    const fichas = await readText("fichas.txt");
+    for (const line of fichas.replace(/^\uFEFF/, "").split(/\r?\n/)) {
+      if (!line.trim() || line.startsWith("#") || /^\s*capa:/i.test(line)) continue;
+      const c = line.split("\t");
+      if (c.length < 5) continue;
+      const kind = c[0].trim().toLowerCase(), title = c[1].trim(), key = keyFor(kind, title);
+      const old = metadata.get(key) || {};
+      metadata.set(key, { ...old, tmdbId: c[2].trim(), genres: c[4].trim() });
+    }
+  } catch (_) {}
+  try {
+    const details = await readText("detalhes.txt");
+    for (const line of details.replace(/^\uFEFF/, "").split(/\r?\n/)) {
+      if (!line.trim() || line.startsWith("#")) continue;
+      const c = line.split("\t");
+      if (c.length < 5) continue;
+      const kind = c[0].trim().toLowerCase(), title = c[1].trim(), key = keyFor(kind, title);
+      const old = metadata.get(key) || {};
+      metadata.set(key, { ...old, year: c[2].trim(), rating: c[3].trim(), certification: c[4].trim(), popularity: c[5] ? c[5].trim() : "" });
+    }
+  } catch (_) {}
+  return metadata;
+}
+
+function cleanAttribute(value) {
+  return String(value || "").replace(/[\r\n"]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function entry(title, url, group, label, logo, meta = {}) {
   const cleanTitle = String(title).replace(/[\r\n]/g, " ").replace(/"/g, "'").trim();
-  const display = label ? cleanTitle + " [" + label + "]" : cleanTitle;
+  const year = cleanAttribute(meta.year), rating = cleanAttribute(meta.rating);
+  const genres = cleanAttribute(meta.genres), certification = cleanAttribute(meta.certification);
+  const displayBase = year && !cleanTitle.endsWith("(" + year + ")") ? cleanTitle + " (" + year + ")" : cleanTitle;
+  const score = rating && Number.isFinite(Number(rating)) ? " ★ " + Number(rating).toFixed(1) + "/10" : "";
+  const display = displayBase + score + (label ? " [" + label + "]" : "");
   const cleanGroup = String(group).replace(/[\r\n"]/g, " ").trim();
-  const tvgLogo = logo ? ' tvg-logo="' + String(logo).replace(/"/g, "%22") + '"' : "";
-  return '#EXTINF:-1' + tvgLogo + ' group-title="' + cleanGroup + '",' + display + "\n" + url;
+  const attrs = [];
+  if (logo) attrs.push('tvg-logo="' + String(logo).replace(/"/g, "%22") + '"');
+  if (meta.tmdbId) attrs.push('tmdb-id="' + cleanAttribute(meta.tmdbId) + '"');
+  if (year) attrs.push('tvg-year="' + year + '"');
+  if (rating) attrs.push('tvg-rating="' + rating + '"');
+  if (genres) attrs.push('tvg-genre="' + genres + '"');
+  if (certification) attrs.push('tvg-rating-system="' + certification + '"');
+  return '#EXTINF:-1 ' + attrs.join(" ") + ' group-title="' + cleanGroup + '",' + display + "\n" + url;
 }
 
 module.exports = async function handler(req, res) {
@@ -144,6 +186,7 @@ module.exports = async function handler(req, res) {
     }
 
     const covers = await loadCovers();
+    const metadata = await loadMetadata();
     const output = ["#EXTM3U"];
     const seen = new Set();
     const jobs = [];
@@ -160,8 +203,9 @@ module.exports = async function handler(req, res) {
             for (const v of parseVersions(cols.slice(1), bases)) {
               const versionLabel = v.version === "dub" ? "Dublado" : v.version === "leg" ? "Legendado" : v.version;
               const logo = covers.get("f:" + normTitle(title)) || "";
+              const meta = metadata.get("f:" + normTitle(title)) || {};
               const key = ["f", normTitle(title), versionLabel, v.url].join("|");
-              if (!seen.has(key)) { seen.add(key); output.push(entry(title, v.url, "Filmes", versionLabel, logo)); }
+              if (!seen.has(key)) { seen.add(key); output.push(entry(title, v.url, "Filmes", versionLabel, logo, meta)); }
               if (output.length >= MAX_ITEMS * 2) return;
             }
           }
@@ -203,8 +247,9 @@ module.exports = async function handler(req, res) {
               if (!url) continue;
               const label = "T" + season.padStart(2, "0") + "E" + episode.padStart(2, "0") + (version === "dub" ? " Dublado" : version === "leg" ? " Legendado" : "");
               const logo = covers.get("s:" + normTitle(s.title)) || "";
+              const meta = metadata.get("s:" + normTitle(s.title)) || {};
               const key = ["s", normTitle(show), label, url].join("|");
-              if (!seen.has(key)) { seen.add(key); output.push(entry(show + " - " + label, url, "Séries", "", logo)); }
+              if (!seen.has(key)) { seen.add(key); output.push(entry(show + " - " + label, url, "Séries", "", logo, meta)); }
               if (output.length >= MAX_ITEMS * 2) return;
             }
           }
