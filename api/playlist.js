@@ -328,6 +328,20 @@ module.exports = async function handler(req, res) {
       const titleB = b.slice(0, b.indexOf("\n")).split(",").slice(-1)[0] || "";
       return titleA.localeCompare(titleB, "pt-BR", { numeric: true, sensitivity: "base" });
     });
+    if (genreFilter && req.query.offset === undefined && req.query.limit === undefined) {
+      const pageSize = 100;
+      const totalPages = Math.ceil(sortedEntries.length / pageSize);
+      const baseUrl = "https://ottfilmes.vercel.app/api/genero/" + encodeURIComponent(genreFilter);
+      const genreLabel = GENRES.find(([slug]) => slug === genreFilter)?.[1] || genreFilter;
+      const pageLines = ["#EXTM3U"];
+      for (let page = 0; page < totalPages; page++) {
+        const first = page * pageSize + 1;
+        const last = Math.min((page + 1) * pageSize, sortedEntries.length);
+        pageLines.push('#EXTINF:0 type="playlist",' + genreLabel + " — " + first + " a " + last);
+        pageLines.push(baseUrl + "?offset=" + (page * pageSize) + "&limit=" + pageSize);
+      }
+      return res.status(200).send(pageLines.join("\n") + "\n");
+    }
     const entries = sortedEntries.slice(offset, offset + limit);
     res.setHeader("X-Playlist-Total", String(output.length - 1));
     res.setHeader("X-Playlist-Returned", String(entries.length));
