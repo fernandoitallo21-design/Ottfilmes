@@ -267,7 +267,8 @@ module.exports = async function handler(req, res) {
             for (const v of parseVersions(cols.slice(1), bases)) {
               const versionLabel = v.version === "dub" ? "Dublado" : v.version === "leg" ? "Legendado" : v.version;
               const logo = covers.get("f:" + normTitle(title)) || "";
-              const meta = metadata.get("f:" + normTitle(title)) || {};\n              if (genreFilter && !genreMatches(meta.genres, genreFilter)) continue;
+              const meta = metadata.get("f:" + normTitle(title)) || {};
+              if (genreFilter && !genreMatches(meta.genres, genreFilter)) continue;
               const key = ["f", normTitle(title), versionLabel].join("|");
               if (!seen.has(key)) { seen.add(key); output.push(entry(title, v.url, "Filmes", versionLabel, logo, meta)); }
               if (output.length >= MAX_ITEMS * 2) return;
