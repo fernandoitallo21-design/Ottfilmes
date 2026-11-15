@@ -157,7 +157,7 @@ const GENRES = [
 ];
 
 function normalizeGenre(value) {
-  return String(value || "").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "")
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
