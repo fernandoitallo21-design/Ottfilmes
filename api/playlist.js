@@ -146,6 +146,48 @@ async function loadMetadata() {
   return metadata;
 }
 
+const GENRES = [
+  ["acao", "Ação"], ["aventura", "Aventura"], ["animacao", "Animação"],
+  ["comedia", "Comédia"], ["crime", "Crime"], ["documentario", "Documentário"],
+  ["drama", "Drama"], ["familia", "Família"], ["fantasia", "Fantasia"],
+  ["ficcao-cientifica", "Ficção científica"], ["historia", "História"],
+  ["terror", "Terror"], ["musica", "Música"], ["misterio", "Mistério"],
+  ["romance", "Romance"], ["suspense", "Suspense / Thriller"],
+  ["guerra", "Guerra"], ["faroeste", "Faroeste"]
+];
+
+function normalizeGenre(value) {
+  return String(value || "").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function genreMatches(value, slug) {
+  const raw = String(value || "");
+  const parts = raw.split(/[|,;/]+/).map(normalizeGenre).filter(Boolean);
+  const aliases = {
+    "ficcao-cientifica": ["ficcao cientifica", "science fiction", "sci fi", "sci-fi"],
+    "suspense": ["suspense", "thriller"],
+    "acao": ["acao", "action"],
+    "aventura": ["aventura", "adventure"],
+    "animacao": ["animacao", "animation"],
+    "comedia": ["comedia", "comedy"],
+    "crime": ["crime"],
+    "documentario": ["documentario", "documentary"],
+    "drama": ["drama"],
+    "familia": ["familia", "family"],
+    "fantasia": ["fantasia", "fantasy"],
+    "historia": ["historia", "history"],
+    "terror": ["terror", "horror"],
+    "musica": ["musica", "music"],
+    "misterio": ["misterio", "mystery"],
+    "romance": ["romance"],
+    "guerra": ["guerra", "war"],
+    "faroeste": ["faroeste", "western"]
+  };
+  const wanted = aliases[slug] || [normalizeGenre(slug)];
+  return parts.some(part => wanted.includes(part));
+}
+
 function cleanAttribute(value) {
   return String(value || "").replace(/[\r\n"]/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -177,10 +219,21 @@ module.exports = async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).send("Method not allowed");
 
   try {
-    const type = String(req.query.type || "all").toLowerCase();
+    const mode = String(req.query.mode || "").toLowerCase();
+    if (mode === "ssiptv-index") {
+      const baseUrl = "https://ottfilmes.vercel.app";
+      const lines = ["#EXTM3U"];
+      for (const [slug, label] of GENRES) {
+        lines.push('#EXTINF:0 type="playlist",' + label);
+        lines.push(baseUrl + "/api/genero/" + slug);
+      }
+      return res.status(200).send(lines.join("\\n") + "\\n");
+    }
+    const genreFilter = String(req.query.genre || "").toLowerCase();
+    const type = genreFilter ? "movies" : String(req.query.type || "all").toLowerCase();
     if (!["all", "movies", "series"].includes(type)) return res.status(400).send("Use type=all, movies ou series");
     const requestedLimit = Number.parseInt(req.query.limit, 10);
-    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 2000)) : 500;
+    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 20000)) : (genreFilter ? 20000 : 500);
     const requestedOffset = Number.parseInt(req.query.offset, 10);
     const offset = Number.isFinite(requestedOffset) ? Math.max(0, requestedOffset) : 0;
 
@@ -214,7 +267,7 @@ module.exports = async function handler(req, res) {
             for (const v of parseVersions(cols.slice(1), bases)) {
               const versionLabel = v.version === "dub" ? "Dublado" : v.version === "leg" ? "Legendado" : v.version;
               const logo = covers.get("f:" + normTitle(title)) || "";
-              const meta = metadata.get("f:" + normTitle(title)) || {};
+              const meta = metadata.get("f:" + normTitle(title)) || {};\n              if (genreFilter && !genreMatches(meta.genres, genreFilter)) continue;
               const key = ["f", normTitle(title), versionLabel].join("|");
               if (!seen.has(key)) { seen.add(key); output.push(entry(title, v.url, "Filmes", versionLabel, logo, meta)); }
               if (output.length >= MAX_ITEMS * 2) return;
