@@ -1,11 +1,24 @@
-const BASE = (process.env.SAIMO_VOD_BASE || "https://filmes-saimo.pages.dev/vod/").replace(/\/?$/, "/");
+const DEFAULT_BASE = "https://filmes-saimo.pages.dev/";
+const BASE_CANDIDATES = process.env.SAIMO_VOD_BASE ? [process.env.SAIMO_VOD_BASE] : [DEFAULT_BASE, DEFAULT_BASE + "vod/"];
 const MAX_ITEMS = 20000;
+let ACTIVE_BASE = null;
 
 async function readText(path) {
-  const url = new URL(path, BASE);
-  const response = await fetch(url, { headers: { "accept": "text/plain,*/*" } });
-  if (!response.ok) throw new Error("Falha ao ler " + path + " (HTTP " + response.status + ")");
-  return response.text();
+  const candidates = ACTIVE_BASE ? [ACTIVE_BASE] : BASE_CANDIDATES;
+  let lastError;
+  for (const candidate of candidates) {
+    const base = candidate.endsWith("/") ? candidate : candidate + "/";
+    try {
+      const response = await fetch(new URL(path, base), { headers: { "accept": "text/plain,*/*" } });
+      if (!response.ok) {
+        lastError = new Error("Falha ao ler " + path + " (HTTP " + response.status + ") em " + base);
+        continue;
+      }
+      ACTIVE_BASE = base;
+      return await response.text();
+    } catch (error) { lastError = error; }
+  }
+  throw lastError || new Error("Não foi possível localizar " + path);
 }
 
 function safeUrl(value, bases) {
