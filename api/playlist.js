@@ -227,7 +227,7 @@ module.exports = async function handler(req, res) {
         lines.push('#EXTINF:0 type="playlist",' + label);
         lines.push(baseUrl + "/api/genero/" + slug);
       }
-      return res.status(200).send(lines.join("\\n") + "\\n");
+      return res.status(200).send(lines.join("\n") + "\n");
     }
     const genreFilter = String(req.query.genre || "").toLowerCase();
     const type = genreFilter ? "movies" : String(req.query.type || "all").toLowerCase();
