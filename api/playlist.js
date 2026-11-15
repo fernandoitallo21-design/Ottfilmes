@@ -58,11 +58,65 @@ function parseVersions(fields, bases) {
   return result;
 }
 
-function entry(title, url, group, label) {
+function normTitle(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/\s*\(\d{4}\)\s*$/, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function makeImageUrl(value, imageBase) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try { return new URL(raw, imageBase || ACTIVE_BASE || DEFAULT_BASE).href; }
+  catch { return ""; }
+}
+
+async function loadCovers() {
+  const covers = new Map();
+  let imageBase = "";
+  try {
+    const fichas = await readText("fichas.txt");
+    for (const line of fichas.replace(/^\uFEFF/, "").split(/\r?\n/)) {
+      if (/^\s*capa:\s*/i.test(line)) {
+        imageBase = line.replace(/^\s*capa:\s*/i, "").trim();
+        continue;
+      }
+      if (!line.trim() || line.startsWith("#")) continue;
+      const c = line.split("\t");
+      if (c.length < 4) continue;
+      const kind = c[0].trim().toLowerCase();
+      const title = c[1].trim();
+      const logo = makeImageUrl(c[3], imageBase);
+      if (logo && title) covers.set((kind === "s" ? "s:" : "f:") + normTitle(title), logo);
+    }
+  } catch (_) {}
+
+  // Fallback: destaques.txt também contém capas e o prefixo das imagens.
+  try {
+    const highlights = await readText("destaques.txt");
+    for (const line of highlights.replace(/^\uFEFF/, "").split(/\r?\n/)) {
+      if (/^\s*capa:\s*/i.test(line)) {
+        imageBase = line.replace(/^\s*capa:\s*/i, "").trim();
+        continue;
+      }
+      if (!line.trim() || line.startsWith("#") || line.startsWith("fila\t")) continue;
+      const c = line.split("\t");
+      if (c.length < 5) continue;
+      const kind = c[0].trim().toLowerCase();
+      const title = c[1].trim();
+      const logo = makeImageUrl(c[4], imageBase);
+      const key = (kind === "s" ? "s:" : "f:") + normTitle(title);
+      if (logo && title && !covers.has(key)) covers.set(key, logo);
+    }
+  } catch (_) {}
+  return covers;
+}
+
+function entry(title, url, group, label, logo) {
   const cleanTitle = String(title).replace(/[\r\n]/g, " ").replace(/"/g, "'").trim();
   const display = label ? cleanTitle + " [" + label + "]" : cleanTitle;
   const cleanGroup = String(group).replace(/[\r\n"]/g, " ").trim();
-  return '#EXTINF:-1 group-title="' + cleanGroup + '",' + display + "\n" + url;
+  const tvgLogo = logo ? ' tvg-logo="' + String(logo).replace(/"/g, "%22") + '"' : "";
+  return '#EXTINF:-1' + tvgLogo + ' group-title="' + cleanGroup + '",' + display + "\n" + url;
 }
 
 module.exports = async function handler(req, res) {
@@ -89,7 +143,9 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    const covers = await loadCovers();
     const output = ["#EXTM3U"];
+    const seen = new Set();
     const jobs = [];
     for (const letter of letters) {
       const fileLetter = letter === "#" ? "%23" : letter;
@@ -102,7 +158,10 @@ module.exports = async function handler(req, res) {
             if (cols.length < 2) continue;
             const title = cols[0].trim();
             for (const v of parseVersions(cols.slice(1), bases)) {
-              output.push(entry(title, v.url, "Filmes", v.version === "dub" ? "Dublado" : v.version === "leg" ? "Legendado" : v.version));
+              const versionLabel = v.version === "dub" ? "Dublado" : v.version === "leg" ? "Legendado" : v.version;
+              const logo = covers.get("f:" + normTitle(title)) || "";
+              const key = ["f", normTitle(title), versionLabel, v.url].join("|");
+              if (!seen.has(key)) { seen.add(key); output.push(entry(title, v.url, "Filmes", versionLabel, logo)); }
               if (output.length >= MAX_ITEMS * 2) return;
             }
           }
@@ -143,7 +202,9 @@ module.exports = async function handler(req, res) {
               const url = safeUrl(src, bases);
               if (!url) continue;
               const label = "T" + season.padStart(2, "0") + "E" + episode.padStart(2, "0") + (version === "dub" ? " Dublado" : version === "leg" ? " Legendado" : "");
-              output.push(entry(show + " - " + label, url, "Séries", ""));
+              const logo = covers.get("s:" + normTitle(s.title)) || "";
+              const key = ["s", normTitle(show), label, url].join("|");
+              if (!seen.has(key)) { seen.add(key); output.push(entry(show + " - " + label, url, "Séries", "", logo)); }
               if (output.length >= MAX_ITEMS * 2) return;
             }
           }
