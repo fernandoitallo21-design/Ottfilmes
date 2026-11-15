@@ -323,8 +323,8 @@ module.exports = async function handler(req, res) {
     await Promise.all(jobs);
     if (output.length === 1) return res.status(200).send("#EXTM3U\n");
     const sortedEntries = output.slice(1).sort((a, b) => {
-      const titleA = a.slice(0, a.indexOf("\\n")).split(",").slice(-1)[0] || "";
-      const titleB = b.slice(0, b.indexOf("\\n")).split(",").slice(-1)[0] || "";
+      const titleA = a.slice(0, a.indexOf("\n")).split(",").slice(-1)[0] || "";
+      const titleB = b.slice(0, b.indexOf("\n")).split(",").slice(-1)[0] || "";
       return titleA.localeCompare(titleB, "pt-BR", { numeric: true, sensitivity: "base" });
     });
     const entries = sortedEntries.slice(offset, offset + limit);
